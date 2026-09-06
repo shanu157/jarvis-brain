@@ -1,0 +1,17 @@
+{
+  "name": "ai",
+  "version": "1.0.0",
+  "description": "``` pkg install python pip install --upgrade pip export ANTHROPIC_API_KEY=\"sk-ant-your-key-here\" python jarvis.py ```",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  }
+}

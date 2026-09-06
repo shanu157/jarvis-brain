@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jarvis</title>
+<meta name="theme-color" content="#0B0F14">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.png">
+<link rel="apple-touch-icon" href="/static/icon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="hud">
+  <div class="hud-mark">
+    <span class="core" id="core"></span>
+    <span class="hud-title">JARVIS</span>
+  </div>
+  <div class="hud-stats">
+    <select id="lang-select" class="lang-select" aria-label="Voice language"></select>
+    <span id="stat-memory">— KB</span>
+    <span class="dot" id="conn-dot"></span>
+  </div>
+</header>
+
+<main id="log" class="log"></main>
+
+<form id="composer" class="composer">
+  <button type="button" id="mic-btn" aria-label="Voice">🎙</button>
+  <input id="input" type="text" autocomplete="off" placeholder="Message Jarvis…" />
+  <button type="submit" aria-label="Send">SEND</button>
+</form>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

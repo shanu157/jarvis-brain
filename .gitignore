@@ -1,0 +1,4 @@
+memory.py.save
+__pycache__/
+*.pyc
+*.db

@@ -1,0 +1,10 @@
+{
+  "appId": "com.shanu.jarvis",
+  "appName": "Jarvis",
+  "webDir": "static",
+  "server": {
+    "url": "http://127.0.0.1:5000",
+    "cleartext": true
+  }
+}
+
