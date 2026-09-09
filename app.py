@@ -58,6 +58,7 @@ def chat():
     return jsonify({"reply": reply, "type": "chat"})
 
 
+memory.init_db()  # must run on import too, not just direct execution — WSGI servers import this module rather than running it as __main__
+
 if __name__ == "__main__":
-    memory.init_db()
     app.run(host="0.0.0.0", port=5000)
