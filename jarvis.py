@@ -152,7 +152,7 @@ def build_messages(user_input: str):
     ]
 
     if wants_recall(user_input):
-        hits = memory.search_old_chunks(user_input, limit=5)
+        hits = memory.search_old_chunks(user_input, limit=15)
         if hits:
             recalled = "\n".join(f"[{day}] {role}: {content}" for day, role, content in hits)
             messages.append({
