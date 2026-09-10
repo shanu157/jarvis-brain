@@ -24,6 +24,13 @@ def index():
     return send_from_directory("templates", "index.html")
 
 
+@app.route("/.well-known/assetlinks.json")
+def assetlinks():
+    # Must be served at the domain root — Android's Digital Asset Link
+    # verifier checks exactly this path, not /static/.well-known/...
+    return send_from_directory("static/.well-known", "assetlinks.json")
+
+
 @app.route("/api/status")
 def status():
     return jsonify({"memory_kb": round(memory.db_size_kb(), 1)})
@@ -62,3 +69,4 @@ memory.init_db()  # must run on import too, not just direct execution — WSGI s
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
