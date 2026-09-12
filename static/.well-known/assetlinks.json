@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "com.jarvis.app",
-    "sha256_cert_fingerprints": ["B2:27:B4:45:F9:01:E6:4B:BF:DF:A2:F8:D2:62:6A:39:4F:3D:67:A4:7A:FA:47:25:80:80:8D:2E:5E:64:1A:78"]
+    "sha256_cert_fingerprints": ["A2:3B:B0:7B:3F:E0:1A:07:C7:00:12:1D:32:8B:FB:48:2C:DC:9C:7B:B6:9F:BE:CB:A0:24:16:86:A2:77:A6:92"]
   }
 }]
