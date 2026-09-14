@@ -248,22 +248,126 @@ def trigger_macrodroid(action: str = "send_whatsapp"):
 
 # ---------- Alarms & reminders (native Android intent — no MacroDroid needed) ----------
 
-def set_alarm(hour: int, minute: int, label: str = "Jarvis reminder"):
+# Calendar-style weekday numbers Android's alarm intent expects: Sun=1 ... Sat=7
+_DAY_NUMBERS = {"sun": 1, "mon": 2, "tue": 3, "wed": 4, "thu": 5, "fri": 6, "sat": 7}
+
+
+def set_alarm(hour: int, minute: int, label: str = "Jarvis reminder", days=None):
     """
     Creates a real alarm using Android's built-in SET_ALARM intent — every
     clock app supports this, no extra setup required. Some clock apps
     (including Vivo's stock one) may briefly show a confirmation screen
     instead of saving silently; that's normal, just tap confirm once.
+
+    days: optional list of 3-letter weekday codes (e.g. ["mon","wed","fri"])
+    to make it a real recurring weekly alarm instead of a one-off.
     """
-    _run([
+    cmd = [
         "am", "start",
         "-a", "android.intent.action.SET_ALARM",
         "--ei", "android.intent.extra.alarm.HOUR", str(hour),
         "--ei", "android.intent.extra.alarm.MINUTES", str(minute),
         "--es", "android.intent.extra.alarm.MESSAGE", label,
         "--ez", "android.intent.extra.alarm.SKIP_UI", "true",
-    ])
-    return f"Alarm set for {hour:02d}:{minute:02d} — \"{label}\""
+    ]
+    if days:
+        nums = [str(_DAY_NUMBERS[d.lower()[:3]]) for d in days]
+        cmd += ["--eia", "android.intent.extra.alarm.DAYS", ",".join(nums)]
+    _run(cmd)
+    suffix = f" (repeats {'/'.join(d.title()[:3] for d in days)})" if days else ""
+    return f"Alarm set for {hour:02d}:{minute:02d} — \"{label}\"{suffix}"
+
+
+# ---------- Weekly schedule (football practice, tuition, classes) ----------
+
+SCHEDULE_PATH = os.path.expanduser("~/.jarvis/schedule.json")
+_DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+_DAY_FULL = {"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday", "thu": "Thursday",
+             "fri": "Friday", "sat": "Saturday", "sun": "Sunday"}
+
+
+def _load_schedule():
+    if not os.path.exists(SCHEDULE_PATH):
+        return []
+    with open(SCHEDULE_PATH) as f:
+        return json.load(f)
+
+
+def _save_schedule(entries):
+    os.makedirs(os.path.dirname(SCHEDULE_PATH), exist_ok=True)
+    with open(SCHEDULE_PATH, "w") as f:
+        json.dump(entries, f, indent=2)
+
+
+def add_schedule_entry(day: str, label: str, time_str: str = None):
+    """time_str like '18:00', or None if the time isn't known yet."""
+    day = day.lower()[:3]
+    if day not in _DAY_ORDER:
+        raise PhoneError(f"'{day}' isn't a recognized day")
+    entries = _load_schedule()
+    entries.append({"day": day, "label": label, "time": time_str})
+    _save_schedule(entries)
+    time_desc = time_str if time_str else "time not set yet"
+    return f"Added: {_DAY_FULL[day]} — {label} ({time_desc})"
+
+
+def remove_schedule_entry(day: str, label_substr: str):
+    day = day.lower()[:3]
+    entries = _load_schedule()
+    before = len(entries)
+    entries = [e for e in entries
+               if not (e["day"] == day and label_substr.lower() in e["label"].lower())]
+    _save_schedule(entries)
+    removed = before - len(entries)
+    if removed == 0:
+        raise PhoneError(f"No matching entry found on {_DAY_FULL.get(day, day)} for '{label_substr}'")
+    return f"Removed {removed} entr{'y' if removed == 1 else 'ies'} from {_DAY_FULL.get(day, day)}"
+
+
+def get_schedule_for_day(day: str):
+    day = day.lower()[:3]
+    entries = [e for e in _load_schedule() if e["day"] == day]
+    entries.sort(key=lambda e: e["time"] or "99:99")
+    return entries
+
+
+def get_full_schedule():
+    entries = _load_schedule()
+    by_day = {d: [] for d in _DAY_ORDER}
+    for e in entries:
+        by_day[e["day"]].append(e)
+    for d in by_day:
+        by_day[d].sort(key=lambda e: e["time"] or "99:99")
+    return by_day
+
+
+def set_week_alarms():
+    """
+    Creates one recurring alarm per unique (time, label) combination across
+    the whole week, using Android's native day-repeat support — so this only
+    needs to be run once, not every day.
+    """
+    entries = _load_schedule()
+    # Group entries that share the same time+label across multiple days into one recurring alarm
+    groups = {}
+    skipped = []
+    for e in entries:
+        if not e["time"]:
+            skipped.append(f"{_DAY_FULL[e['day']]} — {e['label']} (no time set)")
+            continue
+        key = (e["time"], e["label"])
+        groups.setdefault(key, []).append(e["day"])
+
+    created = []
+    for (time_str, label), days in groups.items():
+        hour, minute = map(int, time_str.split(":"))
+        set_alarm(hour, minute, label, days=days)
+        created.append(f"{label} at {time_str} ({'/'.join(d.title() for d in days)})")
+
+    result = f"Created {len(created)} recurring alarm(s):\n" + "\n".join(created)
+    if skipped:
+        result += "\n\nSkipped (need a time first):\n" + "\n".join(skipped)
+    return result
 
 
 # ---------- Media, WiFi/Bluetooth, Screenshot (MacroDroid triggers) ----------
@@ -337,3 +441,37 @@ def take_screenshot_and_read():
         raise PhoneError(f"OCR failed: {result.stderr.strip() or 'is tesseract installed? pkg install tesseract'}")
     text = result.stdout.strip()
     return text if text else "(screenshot captured, but no readable text found)"
+
+
+# ---------- Weekly football/tuition schedule ----------
+#
+# Hardcoded to your real weekly schedule. "set my week schedule" creates
+# every alarm below in one go — each is a real recurring Android alarm
+# (repeats automatically every week, no need to re-run this each week).
+# For one-off changes (coach reschedules a match, teacher moves a tuition),
+# just talk to Jarvis normally — e.g. "remind me at 4pm to go to practice" —
+# that creates a single one-time alarm without touching this fixed schedule.
+
+WEEKLY_SCHEDULE = [
+    # (hour, minute, label, [days])
+    (8, 0, "Football practice", ["mon", "tue", "wed", "thu", "fri"]),
+    (18, 0, "Political Science tuition", ["mon"]),
+    (18, 0, "English tuition", ["wed"]),
+    (7, 0, "Bengali tuition", ["thu"]),
+    (17, 30, "Computer class", ["sat"]),
+    (17, 30, "Computer class", ["sun"]),
+    (16, 0, "Bengali tuition", ["sun"]),
+    # History tuition on Saturday has no set time yet — add it once you
+    # know the time: set_alarm(H, M, "History tuition", ["sat"])
+]
+
+
+def set_weekly_schedule():
+    """Creates every recurring alarm in WEEKLY_SCHEDULE. Safe to run more
+    than once — Android just creates duplicate alarms if re-run, so only
+    run this once unless you've cleared your alarms."""
+    results = []
+    for hour, minute, label, days in WEEKLY_SCHEDULE:
+        results.append(set_alarm(hour, minute, label, days))
+    results.append("Note: History tuition (Saturday) has no time set yet — tell me the time and I'll add it.")
+    return "\n".join(results)

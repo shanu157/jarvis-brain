@@ -321,6 +321,10 @@ def try_phone_command(text: str):
         if "vibrate" in t:
             return phone.vibrate()
 
+        # Weekly schedule: "set my week schedule" / "set weekly alarms"
+        if re.search(r"\bset (my )?(week|weekly) (schedule|alarms)\b", t):
+            return phone.set_weekly_schedule()
+
         # Alarm/reminder: "set alarm for 7am" / "set alarm for 7:30am wake up"
         #                  "remind me at 3:30pm to call mom"
         m = re.search(r"remind me at (\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+to (.+)", t)
@@ -339,6 +343,66 @@ def try_phone_command(text: str):
                 hour = 0
             if 0 <= hour <= 23 and 0 <= minute <= 59:
                 return phone.set_alarm(hour, minute, label or "Jarvis reminder")
+
+        # Weekly schedule: view today's / full week
+        if re.search(r"\b(what.?s|show|tell) my schedule\b", t) and "today" in t:
+            import datetime
+            today_code = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][datetime.datetime.now().weekday()]
+            entries = phone.get_schedule_for_day(today_code)
+            if not entries:
+                return "Nothing on your schedule today."
+            lines = [f"{e['time'] or 'time TBD'} — {e['label']}" for e in entries]
+            return "Today's schedule:\n" + "\n".join(lines)
+
+        if re.search(r"\b(what.?s|show|tell) my (full |whole |week.?s )?schedule\b", t):
+            full = phone.get_full_schedule()
+            lines = []
+            for day in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]:
+                if full[day]:
+                    day_line = ", ".join(f"{e['time'] or 'TBD'} {e['label']}" for e in full[day])
+                    lines.append(f"{phone._DAY_FULL[day]}: {day_line}")
+            return "Weekly schedule:\n" + "\n".join(lines) if lines else "No schedule set yet."
+
+        # Set all recurring alarms for the whole week in one go
+        if re.search(r"\bset (my |all )?(week|weekly) alarms\b", t):
+            return phone.set_week_alarms()
+
+        # Add/reschedule: "add schedule saturday history 3pm"
+        #                 "reschedule english tuition to friday 5pm"
+        m = re.search(
+            r"reschedule (.+?) to (\w+)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", t
+        )
+        if m:
+            label, day, hour, minute, ampm = m.groups()
+            hour, minute = int(hour), int(minute) if minute else 0
+            if ampm == "pm" and hour != 12:
+                hour += 12
+            if ampm == "am" and hour == 12:
+                hour = 0
+            time_str = f"{hour:02d}:{minute:02d}"
+            try:
+                phone.remove_schedule_entry(day, label)  # drop old slot if it existed
+            except phone.PhoneError:
+                pass
+            return phone.add_schedule_entry(day, label.strip(), time_str)
+
+        m = re.search(
+            r"add schedule (\w+) (.+?) (\d{1,2})(?::(\d{2}))?\s*(am|pm)?$", t
+        )
+        if m:
+            day, label, hour, minute, ampm = m.groups()
+            hour, minute = int(hour), int(minute) if minute else 0
+            if ampm == "pm" and hour != 12:
+                hour += 12
+            if ampm == "am" and hour == 12:
+                hour = 0
+            return phone.add_schedule_entry(day, label.strip(), f"{hour:02d}:{minute:02d}")
+
+        # Remove: "remove schedule wednesday english"
+        m = re.search(r"remove schedule (\w+) (.+)", t)
+        if m:
+            day, label = m.groups()
+            return phone.remove_schedule_entry(day, label.strip())
 
         # Media control
         if re.search(r"\b(play|pause)\b.*\bmusic\b|\bplay.?pause\b", t) or t in ("play", "pause"):
