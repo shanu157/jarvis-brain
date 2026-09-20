@@ -26,6 +26,7 @@ const sendBtn = document.getElementById('send-btn');
 const attachBtn = document.getElementById('attach-btn');
 const cameraBtn = document.getElementById('camera-btn');
 const micBtn = document.getElementById('mic-btn');
+let busy = false;
 
 const fileInput = document.getElementById('file-input');
 const cameraInput = document.getElementById('camera-input');
