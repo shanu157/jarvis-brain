@@ -3,35 +3,196 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Jarvis</title>
-<meta name="theme-color" content="#0B0F14">
-<link rel="manifest" href="/static/manifest.json">
-<link rel="icon" href="/static/icon.png">
-<link rel="apple-touch-icon" href="/static/icon.png">
-<link rel="stylesheet" href="/static/style.css">
+
+<title>JARVIS AI</title>
+
+<meta name="theme-color" content="#05080d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css?v=20260920-2">
 </head>
+
 <body>
 
-<header class="hud">
-  <div class="hud-mark">
-    <span class="core" id="core"></span>
-    <span class="hud-title">JARVIS</span>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+
+    <div class="brand">
+      <div class="reactor">
+        <span></span>
+      </div>
+
+      <div>
+        <div class="brand-name">JARVIS</div>
+        <div class="brand-sub">PERSONAL AI SYSTEM</div>
+      </div>
+    </div>
+
+    <div class="system-status">
+
+      <div class="backend">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="connection-mode">CONNECTING</span>
+      </div>
+
+      <div id="stat-memory" class="memory">— KB</div>
+
+      <select id="lang-select" class="lang-select">
+      </select>
+
+    </div>
+
+  </header>
+
+
+  <!-- AI WORKSPACE -->
+  <main class="workspace">
+
+    <section id="welcome" class="welcome">
+
+      <div class="hero-reactor">
+        <div class="hero-ring ring1"></div>
+        <div class="hero-ring ring2"></div>
+        <div class="hero-ring ring3"></div>
+
+        <div class="hero-core">
+          <span>J</span>
+        </div>
+      </div>
+
+      <h1>How can I help?</h1>
+
+      <p>
+        Ask Jarvis anything, upload a file,
+        or show me something with your camera.
+      </p>
+
+      <div class="suggestions">
+
+        <button type="button" data-prompt="Explain something to me clearly">
+          <span>✦</span>
+          Explain something
+        </button>
+
+        <button type="button" data-prompt="Help me plan my day">
+          <span>◈</span>
+          Plan my day
+        </button>
+
+        <button type="button" data-prompt="Teach me something interesting">
+          <span>◇</span>
+          Teach me
+        </button>
+
+        <button type="button" data-prompt="What can you do?">
+          <span>⚡</span>
+          What can you do?
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- CHAT LOG -->
+    <section id="log" class="log"></section>
+
+  </main>
+
+
+  <!-- ATTACHMENT PREVIEW -->
+  <div id="attachment-preview" class="attachment-preview hidden">
+    <div class="attachment-icon">📎</div>
+
+    <div class="attachment-info">
+      <strong id="attachment-name">File</strong>
+      <span id="attachment-type"></span>
+    </div>
+
+    <button type="button" id="remove-attachment">×</button>
   </div>
-  <div class="hud-stats">
-    <select id="lang-select" class="lang-select" aria-label="Voice language"></select>
-    <span id="stat-memory">— KB</span>
-    <span class="dot" id="conn-dot"></span>
-  </div>
-</header>
 
-<main id="log" class="log"></main>
 
-<form id="composer" class="composer">
-  <button type="button" id="mic-btn" aria-label="Voice">🎙</button>
-  <input id="input" type="text" autocomplete="off" placeholder="Message Jarvis…" />
-  <button type="submit" aria-label="Send">SEND</button>
-</form>
+  <!-- COMPOSER -->
+  <form id="composer" class="composer">
 
-<script src="/static/app.js"></script>
+    <div class="composer-inner">
+
+      <button
+        type="button"
+        id="attach-btn"
+        class="tool-btn"
+        title="Attach file"
+      >＋</button>
+
+      <button
+        type="button"
+        id="camera-btn"
+        class="tool-btn"
+        title="Camera"
+      >⌁</button>
+
+      <button
+        type="button"
+        id="mic-btn"
+        class="tool-btn"
+        title="Voice"
+      >🎙</button>
+
+      <input
+        id="input"
+        type="text"
+        autocomplete="off"
+        placeholder="Ask Jarvis anything..."
+      >
+
+      <button
+        type="submit"
+        id="send-btn"
+        class="send-btn"
+      >
+        <span>SEND</span>
+        <b>↗</b>
+      </button>
+
+    </div>
+
+    <div class="composer-hint">
+      <span>JARVIS</span>
+      <span>•</span>
+      <span>LOCAL + CLOUD</span>
+      <span>•</span>
+      <span>READY</span>
+    </div>
+
+  </form>
+
+
+  <!-- FILE INPUT -->
+  <input
+    id="file-input"
+    type="file"
+    hidden
+    accept="image/*,.pdf,.txt,.md,.csv,.json,.doc,.docx"
+  >
+
+  <!-- CAMERA INPUT -->
+  <input
+    id="camera-input"
+    type="file"
+    hidden
+    accept="image/*"
+    capture="environment"
+  >
+
+</div>
+
+
+<script src="app.js?v=20260920-2"></script>
+
 </body>
 </html>

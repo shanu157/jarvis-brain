@@ -1,186 +1,795 @@
+'use strict';
+
+/*
+ * JARVIS FRONTEND
+ *
+ * Local:
+ *   http://127.0.0.1:5000
+ *
+ * Cloud:
+ *   https://shanu11.pythonanywhere.com
+ */
+
+const CLOUD_URL = 'https://shanu11.pythonanywhere.com';
+const LOCAL_URL = 'http://127.0.0.1:5000';
+
+
+/* ---------- DOM ---------- */
+
 const log = document.getElementById('log');
+const welcome = document.getElementById('welcome');
+
 const form = document.getElementById('composer');
 const input = document.getElementById('input');
-const core = document.getElementById('core');
-const connDot = document.getElementById('conn-dot');
-const statMemory = document.getElementById('stat-memory');
+const sendBtn = document.getElementById('send-btn');
+
+const attachBtn = document.getElementById('attach-btn');
+const cameraBtn = document.getElementById('camera-btn');
 const micBtn = document.getElementById('mic-btn');
-const langSelect = document.getElementById('lang-select');
+
+const fileInput = document.getElementById('file-input');
+const cameraInput = document.getElementById('camera-input');
+
+const attachmentPreview =
+  document.getElementById('attachment-preview');
+
+const attachmentName =
+  document.getElementById('attachment-name');
+
+const attachmentType =
+  document.getElementById('attachment-type');
+
+const removeAttachment =
+  document.getElementById('remove-attachment');
+
+const connectionMode =
+  document.getElementById('connection-mode');
+
+const statusDot =
+  document.getElementById('status-dot');
+
+const statMemory =
+  document.getElementById('stat-memory');
+
+const langSelect =
+  document.getElementById('lang-select');
+
+
+/* ---------- STATE ---------- */
+
+let activeBackend = null;
+let syncRunning = false;
+let selectedFile = null;
+
+
+/* ---------- UI ---------- */
 
 function addMessage(role, text) {
+
+  if (!log) return;
+
+  if (welcome) {
+    welcome.classList.add('hidden');
+  }
+
   const div = document.createElement('div');
+
   div.className = `msg ${role}`;
+
   const label = document.createElement('span');
+
   label.className = 'msg-label';
-  label.textContent = role === 'user' ? 'you' : role === 'action' ? 'jarvis · action' : role === 'error' ? 'jarvis · error' : 'jarvis';
+
+  if (role === 'user') {
+    label.textContent = 'YOU';
+  } else if (role === 'action') {
+    label.textContent = 'JARVIS · ACTION';
+  } else if (role === 'error') {
+    label.textContent = 'JARVIS · ERROR';
+  } else {
+    label.textContent = 'JARVIS AI';
+  }
+
   div.appendChild(label);
-  div.appendChild(document.createTextNode(text));
+
+  div.appendChild(
+    document.createTextNode(String(text ?? ''))
+  );
+
   log.appendChild(div);
+
   log.scrollTop = log.scrollHeight;
 }
 
-async function refreshStatus() {
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-    statMemory.textContent = `${data.memory_kb} KB`;
-    connDot.className = 'dot online';
-  } catch (e) {
-    connDot.className = 'dot error';
+
+function setThinking(value) {
+
+  if (!sendBtn) return;
+
+  sendBtn.disabled = value;
+
+  if (value) {
+    sendBtn.querySelector('span').textContent = '...';
+  } else {
+    sendBtn.querySelector('span').textContent = 'SEND';
   }
 }
 
-// Strips markdown so spoken replies don't say "asterisk asterisk bold asterisk asterisk"
-function stripMarkdownForSpeech(text) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/[*_#`~]/g, '')
-    .replace(/\n+/g, '. ');
+
+function setBackend(url, mode) {
+
+  activeBackend = url;
+
+  if (connectionMode) {
+    connectionMode.textContent = mode;
+  }
+
+  if (!statusDot) return;
+
+  statusDot.className = 'status-dot';
+
+  if (mode === 'LOCAL') {
+    statusDot.classList.add('local');
+  }
+
+  if (mode === 'OFFLINE') {
+    statusDot.classList.add('error');
+  }
 }
 
-// The core send: used by both typing and voice input, so both paths behave identically
-async function sendMessage(text) {
-  addMessage('user', text);
-  core.classList.add('thinking');
 
-  let reply = null;
-  let isAction = false;
+/* ---------- BACKEND ---------- */
+
+async function testBackend(base) {
+
+  const controller = new AbortController();
+
+  const timer = setTimeout(
+    () => controller.abort(),
+    3000
+  );
+
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
-    });
+
+    const res = await fetch(
+      `${base}/api/status?_=${Date.now()}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal
+      }
+    );
+
+    clearTimeout(timer);
+
+    if (!res.ok) return false;
+
     const data = await res.json();
-    if (data.error) {
-      addMessage('error', data.error);
-    } else {
-      reply = data.reply;
-      isAction = data.type === 'action';
-      addMessage(isAction ? 'action' : 'jarvis', reply);
+
+    if (!data.ok) return false;
+
+    if (statMemory && data.memory_kb !== undefined) {
+      statMemory.textContent =
+        `${data.memory_kb} KB`;
     }
-  } catch (err) {
-    addMessage('error', 'Connection lost — is the Jarvis server still running?');
+
+    return true;
+
+  } catch (error) {
+
+    clearTimeout(timer);
+
+    return false;
+  }
+}
+
+
+async function chooseBackend() {
+
+  if (await testBackend(CLOUD_URL)) {
+
+    setBackend(CLOUD_URL, 'CLOUD');
+
+    return CLOUD_URL;
+  }
+
+
+  if (await testBackend(LOCAL_URL)) {
+
+    setBackend(LOCAL_URL, 'LOCAL');
+
+    return LOCAL_URL;
+  }
+
+
+  setBackend(null, 'OFFLINE');
+
+  if (statMemory) {
+    statMemory.textContent = '— KB';
+  }
+
+  return null;
+}
+
+
+async function refreshStatus() {
+  await chooseBackend();
+}
+
+
+/* ---------- PHONE COMMANDS ---------- */
+
+function isPhoneCommand(text) {
+
+  const t = text
+    .toLowerCase()
+    .trim();
+
+  return (
+    t.includes('flashlight') ||
+    t.includes('brightness') ||
+    t.includes('vibrate') ||
+    t.includes('battery') ||
+    t.includes('where am i') ||
+    t.includes('location') ||
+    t.includes('press back') ||
+    t.includes('tap ') ||
+    t.includes('screenshot') ||
+    t.includes('alarm') ||
+    t.includes('remind me') ||
+    t.includes('notify me')
+  );
+}
+
+
+/* ---------- CHAT ---------- */
+
+async function requestChat(base, text) {
+
+  const res = await fetch(
+    `${base}/api/chat`,
+    {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json'
+      },
+
+      body: JSON.stringify({
+        message: text
+      })
+    }
+  );
+
+  let data;
+
+  try {
+    data = await res.json();
+  } catch (_) {
+    throw new Error(
+      `Server returned HTTP ${res.status}`
+    );
+  }
+
+  if (!res.ok || data.error) {
+
+    throw new Error(
+      data.error ||
+      `Server returned HTTP ${res.status}`
+    );
+  }
+
+  return data;
+}
+
+
+async function sendMessage(text) {
+
+  text = String(text || '').trim();
+
+  if (!text) return null;
+
+  addMessage('user', text);
+
+  setThinking(true);
+
+  try {
+
+    /*
+     * DEVICE COMMANDS
+     *
+     * Always local.
+     */
+
+    if (isPhoneCommand(text)) {
+
+      const localOK =
+        await testBackend(LOCAL_URL);
+
+      if (!localOK) {
+
+        addMessage(
+          'error',
+          'Local Jarvis is not running. Start the local Python brain first.'
+        );
+
+        return null;
+      }
+
+      setBackend(LOCAL_URL, 'LOCAL');
+
+      const data =
+        await requestChat(LOCAL_URL, text);
+
+      const reply =
+        data.reply || 'Command completed.';
+
+      addMessage(
+        data.type === 'action'
+          ? 'action'
+          : 'jarvis',
+        reply
+      );
+
+      return reply;
+    }
+
+
+    /*
+     * NORMAL CHAT
+     *
+     * Cloud first.
+     * Local fallback.
+     */
+
+    let backend = activeBackend;
+
+    if (!backend) {
+      backend = await chooseBackend();
+    }
+
+
+    if (backend) {
+
+      try {
+
+        const data =
+          await requestChat(backend, text);
+
+        const reply =
+          data.reply || 'I received your message.';
+
+        addMessage(
+          data.type === 'action'
+            ? 'action'
+            : 'jarvis',
+          reply
+        );
+
+        return reply;
+
+      } catch (firstError) {
+
+        /*
+         * If cloud failed, immediately try local.
+         */
+
+        if (backend === CLOUD_URL) {
+
+          const localOK =
+            await testBackend(LOCAL_URL);
+
+          if (localOK) {
+
+            setBackend(
+              LOCAL_URL,
+              'LOCAL'
+            );
+
+            const data =
+              await requestChat(
+                LOCAL_URL,
+                text
+              );
+
+            const reply =
+              data.reply ||
+              'I received your message.';
+
+            addMessage(
+              data.type === 'action'
+                ? 'action'
+                : 'jarvis',
+              reply
+            );
+
+            return reply;
+          }
+        }
+
+        throw firstError;
+      }
+    }
+
+
+    throw new Error(
+      'Cloud and local Jarvis are unavailable.'
+    );
+
+  } catch (error) {
+
+    console.error(
+      'JARVIS CHAT ERROR:',
+      error
+    );
+
+    addMessage(
+      'error',
+      error.message ||
+      'Something went wrong.'
+    );
+
+    return null;
+
   } finally {
-    core.classList.remove('thinking');
+
+    setThinking(false);
+
     refreshStatus();
   }
-  return reply;
 }
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  sendMessage(text);
-});
 
-refreshStatus();
-setInterval(refreshStatus, 15000);
+/* ---------- FORM ---------- */
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/static/service-worker.js').catch(() => {});
+if (form) {
+
+  form.addEventListener(
+    'submit',
+    function(event) {
+
+      event.preventDefault();
+
+      event.stopPropagation();
+
+      const text =
+        input.value.trim();
+
+      if (!text) {
+        input.focus();
+        return;
+      }
+
+      input.value = '';
+
+      void sendMessage(text);
+    }
+  );
 }
 
-// ---------- Voice mode (Web Speech API — live listen + live talk, any language) ----------
 
-const VOICE_LANGS = [
-  ['en-US', 'English'],
-  ['en-IN', 'English (India)'],
-  ['hi-IN', 'Hindi'],
-  ['bn-IN', 'Bengali'],
-  ['es-ES', 'Spanish'],
-  ['fr-FR', 'French'],
-  ['de-DE', 'German'],
-  ['pt-PT', 'Portuguese'],
-  ['ar-SA', 'Arabic'],
-  ['ru-RU', 'Russian'],
-  ['ja-JP', 'Japanese'],
-  ['zh-CN', 'Chinese'],
-  ['ur-PK', 'Urdu'],
-  ['ta-IN', 'Tamil'],
-  ['te-IN', 'Telugu'],
-];
+/* ---------- ENTER KEY ---------- */
 
-VOICE_LANGS.forEach(([code, label]) => {
-  const opt = document.createElement('option');
-  opt.value = code;
-  opt.textContent = label;
-  langSelect.appendChild(opt);
-});
-langSelect.value = localStorage.getItem('jarvis-voice-lang') || 'en-US';
-langSelect.addEventListener('change', () => {
-  localStorage.setItem('jarvis-voice-lang', langSelect.value);
-});
+if (input) {
 
-const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-let voiceModeActive = false;
+  input.addEventListener(
+    'keydown',
+    function(event) {
 
-if (!SpeechRecognitionAPI) {
-  micBtn.disabled = true;
-  micBtn.title = 'Voice input not supported in this browser';
+      if (
+        event.key === 'Enter' &&
+        !event.shiftKey
+      ) {
+
+        event.preventDefault();
+
+        form.requestSubmit();
+      }
+    }
+  );
 }
 
-function speak(text, onDone) {
-  const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(text));
-  utter.lang = langSelect.value;
-  utter.onend = onDone;
-  utter.onerror = onDone;
-  speechSynthesis.speak(utter);
+
+/* ---------- SUGGESTIONS ---------- */
+
+document
+  .querySelectorAll('[data-prompt]')
+  .forEach(button => {
+
+    button.addEventListener(
+      'click',
+      () => {
+
+        const prompt =
+          button.dataset.prompt || '';
+
+        input.value = prompt;
+
+        input.focus();
+      }
+    );
+  });
+
+
+/* ---------- FILE UI ---------- */
+
+function showSelectedFile(file) {
+
+  selectedFile = file;
+
+  if (!file) {
+    attachmentPreview.classList.add('hidden');
+    return;
+  }
+
+  attachmentName.textContent =
+    file.name;
+
+  attachmentType.textContent =
+    `${file.type || 'unknown type'} · ${formatBytes(file.size)}`;
+
+  attachmentPreview.classList.remove(
+    'hidden'
+  );
 }
 
-function startListening() {
-  if (!SpeechRecognitionAPI) return;
-  recognition = new SpeechRecognitionAPI();
-  recognition.lang = langSelect.value;
-  recognition.continuous = false;
+
+function formatBytes(bytes) {
+
+  if (!bytes) return '0 B';
+
+  const units = [
+    'B',
+    'KB',
+    'MB',
+    'GB'
+  ];
+
+  const index =
+    Math.floor(
+      Math.log(bytes) /
+      Math.log(1024)
+    );
+
+  return (
+    Math.round(
+      bytes /
+      Math.pow(1024, index)
+    * 10
+    ) / 10
+  ) + ' ' + units[index];
+}
+
+
+if (attachBtn) {
+
+  attachBtn.addEventListener(
+    'click',
+    () => fileInput.click()
+  );
+}
+
+
+if (cameraBtn) {
+
+  cameraBtn.addEventListener(
+    'click',
+    () => cameraInput.click()
+  );
+}
+
+
+if (fileInput) {
+
+  fileInput.addEventListener(
+    'change',
+    () => {
+
+      const file =
+        fileInput.files?.[0];
+
+      showSelectedFile(file);
+    }
+  );
+}
+
+
+if (cameraInput) {
+
+  cameraInput.addEventListener(
+    'change',
+    () => {
+
+      const file =
+        cameraInput.files?.[0];
+
+      showSelectedFile(file);
+    }
+  );
+}
+
+
+if (removeAttachment) {
+
+  removeAttachment.addEventListener(
+    'click',
+    () => {
+
+      selectedFile = null;
+
+      fileInput.value = '';
+      cameraInput.value = '';
+
+      attachmentPreview.classList.add(
+        'hidden'
+      );
+    }
+  );
+}
+
+
+/*
+ * For now this only prepares the attachment UI.
+ * The actual AI vision/document-analysis API
+ * will be connected next.
+ */
+
+function describeSelectedFile() {
+
+  if (!selectedFile) {
+    return '';
+  }
+
+  return (
+    `Attached file: ${selectedFile.name}`
+  );
+}
+
+
+/* ---------- VOICE ---------- */
+
+const SpeechRecognition =
+  window.SpeechRecognition ||
+  window.webkitSpeechRecognition;
+
+if (micBtn && SpeechRecognition) {
+
+  const recognition =
+    new SpeechRecognition();
+
+  recognition.lang = 'en-US';
+
   recognition.interimResults = false;
 
-  recognition.onresult = async (event) => {
-    const heard = event.results[0][0].transcript;
-    if (!heard.trim()) {
-      if (voiceModeActive) startListening();
-      return;
-    }
-    const reply = await sendMessage(heard);
-    if (voiceModeActive && reply) {
-      speak(reply, () => { if (voiceModeActive) startListening(); });
-    } else if (voiceModeActive) {
-      startListening();
-    }
-  };
+  recognition.continuous = false;
 
-  recognition.onerror = (event) => {
-    if (event.error === 'no-speech' && voiceModeActive) {
-      startListening(); // silence timeout — just keep the conversation open
-    } else if (event.error !== 'aborted') {
-      addMessage('error', `Voice recognition error: ${event.error}`);
-      stopVoiceMode();
-    }
-  };
 
-  recognition.start();
-  micBtn.classList.add('listening');
+  micBtn.addEventListener(
+    'click',
+    () => {
+
+      try {
+        recognition.start();
+        micBtn.textContent = '●';
+      } catch (_) {}
+    }
+  );
+
+
+  recognition.onresult =
+    event => {
+
+      const heard =
+        event.results?.[0]?.[0]?.transcript ||
+        '';
+
+      input.value = heard;
+
+      input.focus();
+
+      micBtn.textContent = '🎙';
+    };
+
+
+  recognition.onerror =
+    () => {
+      micBtn.textContent = '🎙';
+    };
+
+
+  recognition.onend =
+    () => {
+      micBtn.textContent = '🎙';
+    };
+
+} else if (micBtn) {
+
+  micBtn.title =
+    'Voice input is not supported here';
 }
 
-function stopVoiceMode() {
-  voiceModeActive = false;
-  micBtn.classList.remove('listening');
-  speechSynthesis.cancel();
-  if (recognition) {
-    recognition.onresult = null;
-    recognition.onerror = null;
-    recognition.abort();
+
+/* ---------- LANGUAGE ---------- */
+
+const languages = [
+  ['en-US', 'English'],
+  ['hi-IN', 'Hindi'],
+  ['bn-IN', 'Bengali'],
+  ['ta-IN', 'Tamil'],
+  ['te-IN', 'Telugu']
+];
+
+if (langSelect) {
+
+  for (const [value, label] of languages) {
+
+    const option =
+      document.createElement('option');
+
+    option.value = value;
+    option.textContent = label;
+
+    langSelect.appendChild(option);
   }
+
+  langSelect.value = 'en-US';
+
+  langSelect.addEventListener(
+    'change',
+    () => {
+
+      try {
+        localStorage.setItem(
+          'jarvis_voice_language',
+          langSelect.value
+        );
+      } catch (_) {}
+    }
+  );
 }
 
-micBtn.addEventListener('click', () => {
-  if (voiceModeActive) {
-    stopVoiceMode();
-  } else {
-    voiceModeActive = true;
-    startListening();
-  }
-});
+
+/* ---------- STARTUP ---------- */
+
+async function boot() {
+
+  /*
+   * Make sure stale service-worker
+   * cached JavaScript cannot break the UI.
+   */
+
+  try {
+
+    if ('serviceWorker' in navigator) {
+
+      const registrations =
+        await navigator.serviceWorker
+          .getRegistrations();
+
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+
+  } catch (_) {}
+
+
+  await refreshStatus();
+
+  input.focus();
+}
+
+
+window.addEventListener(
+  'online',
+  refreshStatus
+);
+
+window.addEventListener(
+  'offline',
+  () => setBackend(null, 'OFFLINE')
+);
+
+
+void boot();
+
