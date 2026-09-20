@@ -230,6 +230,9 @@ function isPhoneCommand(text) {
     t.includes('brightness') ||
     t.includes('vibrate') ||
     t.includes('battery') ||
+    t.includes('alarm') ||
+    t.includes('remind me') ||
+    t.includes('notify me') ||
     t.includes('where am i') ||
     t.includes('location') ||
     t.includes('press back') ||
