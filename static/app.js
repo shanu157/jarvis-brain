@@ -167,7 +167,17 @@ async function testBackend(base) {
 
     const data = await res.json();
 
-    if (!data.ok) return false;
+    /*
+     * /api/status currently returns memory_kb.
+     * The presence of a successful JSON status response means
+     * the local Flask backend is alive.
+     */
+    if (
+      data.ok === false &&
+      data.memory_kb === undefined
+    ) {
+      return false;
+    }
 
     if (statMemory && data.memory_kb !== undefined) {
       statMemory.textContent =
@@ -248,22 +258,45 @@ function isPhoneCommand(text) {
 
 /* ---------- CHAT ---------- */
 
-async function requestChat(base, text) {
+async function requestChat(base, text, file = null) {
 
-  const res = await fetch(
-    `${base}/api/chat`,
-    {
-      method: 'POST',
+  let res;
 
-      headers: {
-        'Content-Type': 'application/json'
-      },
+  if (file) {
+    const formData = new FormData();
+    formData.append('message', text);
 
-      body: JSON.stringify({
-        message: text
-      })
-    }
-  );
+    formData.append(
+      'image',
+      file,
+      file.name || 'camera-photo.jpg'
+    );
+
+    res = await fetch(
+      `${base}/api/chat`,
+      {
+        method: 'POST',
+        body: formData
+      }
+    );
+
+  } else {
+
+    res = await fetch(
+      `${base}/api/chat`,
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+          message: text
+        })
+      }
+    );
+  }
 
   let data;
 
@@ -276,7 +309,6 @@ async function requestChat(base, text) {
   }
 
   if (!res.ok || data.error) {
-
     throw new Error(
       data.error ||
       `Server returned HTTP ${res.status}`
@@ -286,14 +318,29 @@ async function requestChat(base, text) {
   return data;
 }
 
-
 async function sendMessage(text) {
 
   text = String(text || '').trim();
 
-  if (!text) return null;
+  /*
+   * Allow a photo to be sent even when there is no typed question.
+   */
+  if (!text && !selectedFile) {
+    return null;
+  }
 
-  addMessage('user', text);
+  const fileToSend = selectedFile;
+
+  const displayText =
+    text ||
+    "Please look at this photo and tell me what you see.";
+
+  addMessage(
+    'user',
+    fileToSend
+      ? `${displayText}\n📷 ${fileToSend.name}`
+      : displayText
+  );
 
   setThinking(true);
 
@@ -302,10 +349,11 @@ async function sendMessage(text) {
     /*
      * DEVICE COMMANDS
      *
-     * Always local.
+     * Keep these local.
+     * Images are handled separately below.
      */
 
-    if (isPhoneCommand(text)) {
+    if (!fileToSend && isPhoneCommand(text)) {
 
       const localOK =
         await testBackend(LOCAL_URL);
@@ -323,7 +371,10 @@ async function sendMessage(text) {
       setBackend(LOCAL_URL, 'LOCAL');
 
       const data =
-        await requestChat(LOCAL_URL, text);
+        await requestChat(
+          LOCAL_URL,
+          text
+        );
 
       const reply =
         data.reply || 'Command completed.';
@@ -340,85 +391,81 @@ async function sendMessage(text) {
 
 
     /*
-     * NORMAL CHAT
+     * PHOTO / CAMERA
      *
-     * Cloud first.
-     * Local fallback.
+     * Images MUST go to the local Flask server because
+     * call_groq_vision() and GROQ_API_KEY are there.
      */
 
-    let backend = activeBackend;
+    let backend;
 
-    if (!backend) {
-      backend = await chooseBackend();
-    }
+    if (fileToSend) {
 
+      const localOK =
+        await testBackend(LOCAL_URL);
 
-    if (backend) {
-
-      try {
-
-        const data =
-          await requestChat(backend, text);
-
-        const reply =
-          data.reply || 'I received your message.';
-
-        addMessage(
-          data.type === 'action'
-            ? 'action'
-            : 'jarvis',
-          reply
+      if (!localOK) {
+        throw new Error(
+          'Local Jarvis is not running. Start the local Python brain first.'
         );
+      }
 
-        return reply;
+      backend = LOCAL_URL;
+      setBackend(LOCAL_URL, 'LOCAL');
 
-      } catch (firstError) {
+    } else {
 
-        /*
-         * If cloud failed, immediately try local.
-         */
+      backend = activeBackend;
 
-        if (backend === CLOUD_URL) {
+      if (!backend) {
+        backend = await chooseBackend();
+      }
 
-          const localOK =
-            await testBackend(LOCAL_URL);
-
-          if (localOK) {
-
-            setBackend(
-              LOCAL_URL,
-              'LOCAL'
-            );
-
-            const data =
-              await requestChat(
-                LOCAL_URL,
-                text
-              );
-
-            const reply =
-              data.reply ||
-              'I received your message.';
-
-            addMessage(
-              data.type === 'action'
-                ? 'action'
-                : 'jarvis',
-              reply
-            );
-
-            return reply;
-          }
-        }
-
-        throw firstError;
+      if (!backend) {
+        throw new Error(
+          'Cloud and local Jarvis are unavailable.'
+        );
       }
     }
 
+    const data =
+      await requestChat(
+        backend,
+        displayText,
+        fileToSend
+      );
 
-    throw new Error(
-      'Cloud and local Jarvis are unavailable.'
+    const reply =
+      data.reply ||
+      'I received your photo.';
+
+    addMessage(
+      data.type === 'action'
+        ? 'action'
+        : 'jarvis',
+      reply
     );
+
+    /*
+     * Clear the attachment only after a successful send.
+     */
+    if (fileToSend) {
+      selectedFile = null;
+
+      if (fileInput) {
+        fileInput.value = '';
+      }
+
+      if (cameraInput) {
+        cameraInput.value = '';
+      }
+
+      if (attachmentPreview) {
+        attachmentPreview.classList.add('hidden');
+      }
+    }
+
+    return reply;
 
   } catch (error) {
 
@@ -442,7 +489,6 @@ async function sendMessage(text) {
     refreshStatus();
   }
 }
-
 
 /* ---------- FORM ---------- */
 

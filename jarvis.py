@@ -139,6 +139,108 @@ def call_groq(messages, api_key):
     return data["choices"][0]["message"]["content"]
 
 
+
+def call_groq_vision(user_text, image_bytes, image_mime, api_key):
+    """
+    Send a browser-uploaded photo directly to Groq's multimodal model.
+
+    The image is converted to a data URL so the browser does not need
+    to upload the photo anywhere else first.
+    """
+
+    import base64
+
+    image_b64 = base64.b64encode(
+        image_bytes
+    ).decode("ascii")
+
+    image_url = (
+        f"data:{image_mime};base64,{image_b64}"
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                SYSTEM_PROMPT
+                + " You can see the user's attached image. "
+                  "Describe only what is actually visible. "
+                  "If the user asks about a person, object, hand, "
+                  "text, or other visible detail, inspect the image "
+                  "carefully before answering. "
+                  "Do not pretend you can see something that is not visible. "
+                  "Use natural, conversational language."
+            ),
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": user_text,
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                    },
+                },
+            ],
+        },
+    ]
+
+    body = json.dumps({
+        "model": "qwen/qwen3.8-27b",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_completion_tokens": 1024,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "jarvis-vision/1.0",
+        },
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            req,
+            timeout=90
+        ) as resp:
+
+            data = json.loads(
+                resp.read().decode("utf-8")
+            )
+
+    except urllib.error.HTTPError as e:
+
+        detail = e.read().decode("utf-8")
+
+        raise RuntimeError(
+            f"Groq Vision HTTP {e.code}: {detail}"
+        ) from None
+
+    except Exception as e:
+
+        raise RuntimeError(
+            f"Groq Vision request failed: {e}"
+        ) from None
+
+    try:
+        return data["choices"][0]["message"]["content"]
+
+    except (KeyError, IndexError, TypeError):
+
+        raise RuntimeError(
+            f"Unexpected Groq Vision response: {data}"
+        )
+
+
 def wants_recall(text: str) -> bool:
     lowered = text.lower()
     return any(trigger in lowered for trigger in RECALL_TRIGGERS)
